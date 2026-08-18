@@ -1,10 +1,11 @@
 import html
 import pandas as pd
 import streamlit as st
+from sqlalchemy import text
 from ai.story_engine import generate_blueprint,regenerate_hooks,regenerate_scene
 from components.story_ui import render_hook_picker,render_research,render_scene,render_sources
 from config.settings import STORY_MODES,ORIGIN_OPTIONS
-from data.store import create_story,update_story,content_id,get_story,record_ai_usage,summarize_ai_usage,delete_story
+from data.store import create_story,update_story,content_id,get_story,record_ai_usage,summarize_ai_usage,get_connection
 from models.story_blueprint import StoryBlueprint
 from utils.helpers import cloud_guard,page_header,production_defaults
 
@@ -13,6 +14,11 @@ try:
  api_key=str(st.secrets["GEMINI_API_KEY"]); model=str(st.secrets.get("GEMINI_MODEL","gemini-3.6-flash")); grounding_enabled=bool(st.secrets.get("ENABLE_GROUNDING",True))
 except Exception:
  st.error("Gemini API is not configured in Streamlit Secrets."); st.stop()
+
+def delete_story_local(story_id:int):
+ conn=get_connection()
+ with conn.session as session:
+  session.execute(text("delete from public.stories where id=:id"),{"id":story_id}); session.commit()
 
 def render_ai_usage(performance):
  usage=(performance or {}).get("ai_usage") or {}
@@ -81,4 +87,4 @@ if "active_blueprint" in st.session_state and "active_story_id" in st.session_st
   st.warning(f"Delete {content_id(story_id)} permanently?")
   confirm=st.checkbox("Yes, permanently delete it",key=f"confirm_delete_create_{story_id}")
   if st.button("Delete permanently",type="secondary",disabled=not confirm,key=f"delete_create_{story_id}",use_container_width=True):
-   delete_story(story_id); st.session_state.pop("active_story_id",None); st.session_state.pop("active_blueprint",None); st.success("Story deleted."); st.rerun()
+   delete_story_local(story_id); st.session_state.pop("active_story_id",None); st.session_state.pop("active_blueprint",None); st.rerun()
