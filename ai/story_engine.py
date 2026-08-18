@@ -248,6 +248,15 @@ Premise: {blueprint.premise}
 Original angle: {blueprint.original_angle}
 Verification: {blueprint.verification_summary}
 Mode: {blueprint.story_mode}
+
+HOOK REGENERATION RULES:
+- Keep each hook short, cinematic and readable on a phone.
+- Do not fabricate witnesses, traveler reports, dates, discoveries or evidence.
+- If Mode is FICTIONAL_LEGEND, every hook must preserve ambiguity and clearly sound like a legend, rumor or story rather than a documented observation.
+- Good FICTIONAL_LEGEND patterns include: "Some say...", "The story goes...", "According to an old tale...", "There is said to be...", or a clearly hypothetical question.
+- Do not mechanically repeat the same opening phrase across all 5 hooks.
+- Score honestly for scroll-stop strength.
+
 Return only 5 hook objects. Keep factual wording compatible with the story mode.
 """
     client = _client(api_key)
@@ -266,12 +275,35 @@ def regenerate_scene(api_key: str, model: str, blueprint: StoryBlueprint, scene_
 Regenerate ONLY scene {scene_number} for this MORQEVA blueprint while preserving the rest of the story and visual continuity.
 Title: {blueprint.final_title}
 Premise: {blueprint.premise}
+Mode: {blueprint.story_mode}
 Visual bible: {blueprint.visual_bible}
 Selected hook: {blueprint.hooks[blueprint.selected_hook_index].text}
 Existing scene: {existing.model_dump_json()}
 Previous scene caption: {blueprint.scenes[scene_number-2].english_caption if scene_number > 1 else 'N/A'}
 Next scene caption: {blueprint.scenes[scene_number].english_caption if scene_number < 10 else 'N/A'}
-Make it stronger without inventing unsupported factual claims. Return only one scene object.
+
+SCENE REGENERATION RULES:
+- Strengthen the scene without changing the overall story arc.
+- Do not invent unsupported factual claims, witnesses, traveler observations, dates or evidence.
+- If Mode is FICTIONAL_LEGEND and this is Scene 1 or Scene 2, the English caption MUST explicitly preserve legendary ambiguity. Adapt the selected hook safely instead of copying it literally if the selected hook sounds too factual.
+- For FICTIONAL_LEGEND, prefer wording such as "some say", "the story goes", "there is said to be", "according to the tale", or another natural ambiguity marker.
+- English caption should normally be 6–13 words and easy to read quickly.
+
+DARIJA REGENERATION RULES:
+- Write natural everyday Moroccan Darija in Latin/French letters.
+- Adapt meaning; never translate English word-for-word.
+- Avoid formal Arabic/Moroccanized MSA words such as "moussafirin".
+- Prefer natural forms such as: kaygolo, li kaydkhol, had l-wad, b3d nss lil, kayلاحظ, wa7ed l7aja, ghriba, 7ed ma kayna3s.
+- Keep it short and conversational, as if a Moroccan person were telling the story to a friend.
+- Use common numerals such as 3, 7 and 9 where natural.
+
+VISUAL/MOTION RULES:
+- Preserve the approved visual bible and image continuity.
+- Flow prompt remains photorealistic, vertical 9:16, with no text/logo/watermark.
+- Vibes motion should be subtle and preserve image structure.
+- Symphony fallback may be stronger but must prevent morphing and unwanted new objects.
+
+Return only one scene object.
 """
     client = _client(api_key)
     interaction = client.interactions.create(
