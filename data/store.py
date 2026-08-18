@@ -138,3 +138,10 @@ def delete_story(story_id: int) -> None:
     with conn.session as session:
         session.execute(text("delete from public.stories where id=:id"), {"id": story_id})
         session.commit()
+
+
+def delete_all_stories() -> None:
+    conn = get_connection()
+    with conn.session as session:
+        session.execute(text("delete from public.stories"))
+        session.commit()
