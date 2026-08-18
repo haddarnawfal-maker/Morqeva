@@ -2,6 +2,7 @@ import streamlit as st
 
 from utils.helpers import apply_custom_css, render_sidebar
 
+# Deployment sync marker: story deletion controls are now part of the current main branch.
 st.set_page_config(
     page_title="MORQEVA | Dark Vault",
     page_icon="🎬",
