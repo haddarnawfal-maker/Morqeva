@@ -93,5 +93,4 @@ class StoryBlueprint(BaseModel):
                     scene.duration_seconds = 6.2
 
         self.total_duration_seconds = round(sum(s.duration_seconds for s in self.scenes), 1)
-        self.selected_hook_index = self.recommended_hook_index
         return self
