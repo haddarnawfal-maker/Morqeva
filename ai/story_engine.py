@@ -30,9 +30,14 @@ LOCKED MASTER RULES:
 - Maintain a single coherent visual world across all 10 scenes. Build a visual_bible and repeat its key continuity cues in prompts.
 - The first scene must be a scroll-stopping hook. Scene 10 must leave a lingering final thought rather than a generic CTA.
 - Do not hardcode horror clichés, monsters, glowing eyes or supernatural effects unless the source material truly calls for them.
-- Do not invent factual claims in VERIFIED_REAL mode.
-- In FOLKLORE mode, clearly distinguish documented history from oral legend or disputed claims.
-- In FICTIONAL_LEGEND mode, the story may feel plausible, but wording must signal ambiguity ("it is said", "the story goes", "maybe") and must not impersonate documented historical evidence.
+- VERIFIED_REAL: every factual claim must be supported by grounded research. Never embellish facts simply to make the story darker.
+- FOLKLORE: real geography/history may be used, but legendary claims must remain explicitly framed as legend, oral tradition, disputed belief or unverified account.
+- FICTIONAL_LEGEND: create an atmospheric fictional legend that feels culturally and geographically believable, but NEVER attach invented tragedies, diseases, rituals, crimes, disasters or supernatural events to a real named village, real person or real community.
+- In FICTIONAL_LEGEND mode, prefer an unnamed or clearly fictional settlement. Never invent a precise historical date merely to create false credibility.
+- Fictional captions must preserve ambiguity with natural phrases such as "it is said", "according to the story", "some say", "the legend claims", or "maybe".
+- Do NOT create pseudo-scientific explanations such as mysterious frequencies, neurological phenomena, toxins, experiments or impossible medical conditions unless the user's seed specifically asks for that angle.
+- For fictional legends, prefer human customs, unexplained behaviour, strange traditions, missing explanations and atmospheric mysteries over monsters or fake science.
+- A fictional legend should leave the viewer wondering whether an old story could have existed, not believing that fabricated evidence has been verified.
 """
 
 
@@ -163,13 +168,39 @@ FACTS:
 
 SCENES:
 - Exactly 10 scenes.
-- Aim roughly 6.2 seconds each; total will be normalized to 62 seconds.
-- Each English caption should usually be 5–14 words; split ideas across scenes rather than creating paragraphs.
-- Darija must be natural Moroccan Darija in Latin/French letters and concise enough to sit underneath English.
-- scene 1 must use the recommended hook or a condensed version of it.
-- Each Flow image prompt must be detailed enough to paste directly into Flow, vertical 9:16, photorealistic, no text, and repeat continuity details from visual_bible.
-- Vibes prompts should prioritize subtle realistic motion and image preservation.
-- Symphony fallback prompts can request stronger controlled motion, but must preserve architecture/people/objects.
+- Total finished duration is 62 seconds.
+- Tell ONE coherent story with escalation; do not create 10 disconnected facts.
+- Scene 1: immediate curiosity hook.
+- Scene 2: establish the location/world.
+- Scene 3: introduce the strange behaviour or mystery.
+- Scene 4: deepen the pattern.
+- Scene 5: show what inhabitants supposedly do or believe.
+- Scene 6: introduce the rule/tradition/consequence.
+- Scene 7: reveal the alleged origin or oldest version of the story.
+- Scene 8: introduce uncertainty, contradiction or missing explanation.
+- Scene 9: return to the present or show the mystery surviving.
+- Scene 10: quiet, unsettling final thought with ambiguity. Never use a generic CTA.
+
+CAPTIONS:
+- English must sound cinematic, simple and immediately understandable.
+- Usually 6–13 words per caption.
+- Avoid academic wording and documentary jargon.
+- Never write long explanatory sentences.
+- For FICTIONAL_LEGEND, do not state invented claims as objective facts.
+- Do not repeat "it is said" mechanically in every scene; vary naturally between "some say", "the story goes", "according to the legend", ambiguity and direct atmospheric observations.
+- Darija must sound like natural everyday Moroccan Darija written with Latin/French letters.
+- Darija is an adaptation, NOT a literal word-for-word translation.
+- Prefer Moroccan vocabulary and syntax.
+- Avoid awkward machine-translated Arabic structures.
+
+VISUALS:
+- Each Flow prompt must be directly paste-ready.
+- 9:16 vertical, photorealistic cinematic documentary photography.
+- Preserve one coherent location, architecture, weather, era, wardrobe and lighting language across all 10 scenes.
+- Never place captions, logos or written text inside generated images.
+- Do not make every scene another wide village shot. Alternate establishing shots, alleys, interiors, people, details, hands, windows, landscapes and close-ups.
+- Vibes prompts must use subtle camera/environmental movement and preserve the original image.
+- Symphony fallback prompts may use stronger controlled motion while explicitly preventing morphing and unwanted new objects.
 - Include 1–3 useful SFX per scene.
 
 Return ONLY schema-valid structured output.
