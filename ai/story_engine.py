@@ -162,8 +162,15 @@ HOOKS:
 - Recommend the strongest one.
 
 FACTS:
-- Every factual claim must be labeled VERIFIED, FOLKLORE, UNVERIFIED, or FICTION.
-- source_indices may ONLY reference numbers from the source index above.
+- Every claim must be labeled VERIFIED, FOLKLORE, UNVERIFIED, or FICTION.
+- VERIFIED = supported by grounded sources.
+- FOLKLORE = a real existing legend, oral tradition or belief found in grounded sources.
+- UNVERIFIED = a real-world claim found in research but not sufficiently established.
+- FICTION = anything invented by MORQEVA for a Fictional Legend.
+- NEVER label an AI-invented legend, local tale, ritual or belief as FOLKLORE.
+- In FICTIONAL_LEGEND mode, use VERIFIED facts only for useful real-world cultural, geographic or architectural context.
+- Do not generate irrelevant factual background simply to make fictional stories appear credible.
+- source_indices may ONLY reference numbers from the actual grounded source index.
 - Never invent a URL.
 
 SCENES:
@@ -187,11 +194,19 @@ CAPTIONS:
 - Avoid academic wording and documentary jargon.
 - Never write long explanatory sentences.
 - For FICTIONAL_LEGEND, do not state invented claims as objective facts.
-- Do not repeat "it is said" mechanically in every scene; vary naturally between "some say", "the story goes", "according to the legend", ambiguity and direct atmospheric observations.
-- Darija must sound like natural everyday Moroccan Darija written with Latin/French letters.
-- Darija is an adaptation, NOT a literal word-for-word translation.
-- Prefer Moroccan vocabulary and syntax.
-- Avoid awkward machine-translated Arabic structures.
+- Scene 1 or Scene 2 must clearly establish legendary ambiguity with wording such as "some say", "according to the story", "the legend says", or equivalent.
+- After that framing is established, later captions may describe events more directly for cinematic flow.
+- Do not repeat "it is said" mechanically in every scene.
+
+DARIJA:
+- Write genuinely natural Moroccan Darija using Latin/French letters and common numerals such as 3, 7 and 9 where natural.
+- Never transliterate Modern Standard Arabic sentence structure.
+- Never use formal Arabic vocabulary when an everyday Moroccan expression exists.
+- The Darija should sound like something a Moroccan person would naturally say to a friend.
+- Adapt the meaning rather than translating English word-for-word.
+- Prefer forms such as: kaygolo, kayna, wa7ed, chi wa7ed, 7ed, b3d, nss lil, kayban, kayt7ka, ma 3arf 7ed.
+- Keep every Darija caption short enough to read underneath the English caption.
+- Do not use spellings like "moussafirin" or literary/formal Arabic phrasing.
 
 VISUALS:
 - Each Flow prompt must be directly paste-ready.
