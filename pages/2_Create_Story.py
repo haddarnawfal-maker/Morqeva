@@ -18,6 +18,23 @@ except Exception:
     st.error("Add GEMINI_API_KEY to Streamlit Cloud Secrets before generating blueprints.")
     st.stop()
 
+
+def show_generation_error(exc: Exception) -> None:
+    """Turn provider/API failures into useful MORQEVA messages without exposing noisy raw errors."""
+    message = str(exc)
+    lowered = message.lower()
+    if "429" in lowered or "quota" in lowered or "too_many_requests" in lowered or "resource_exhausted" in lowered:
+        st.warning(
+            "Gemini free quota is temporarily exhausted. MORQEVA is OK — no story was created and nothing was lost. "
+            "Wait for the quota window to reset, then press Generate once. Repeated clicks will not help."
+        )
+        st.caption("Quota protection: generation stopped immediately instead of continuing with more AI work.")
+    elif "503" in lowered or "unavailable" in lowered or "overloaded" in lowered:
+        st.warning("Gemini is temporarily unavailable/overloaded. MORQEVA is OK. Try again later.")
+    else:
+        st.error(f"Generation could not complete: {message}")
+
+
 with st.form("story_seed"):
     seed = st.text_input("Story seed / title", placeholder="e.g. The graves Marrakech forgot for 250 years")
     c1, c2 = st.columns(2)
@@ -57,8 +74,8 @@ if generate:
                 st.session_state["active_blueprint"] = bp.model_dump(mode="json")
                 status.update(label=f"{content_id(row)} blueprint ready", state="complete")
             except Exception as exc:
-                status.update(label="Generation failed", state="error")
-                st.error(str(exc))
+                status.update(label="Generation paused", state="error")
+                show_generation_error(exc)
 
 if "active_blueprint" in st.session_state and "active_story_id" in st.session_state:
     bp = StoryBlueprint.model_validate(st.session_state["active_blueprint"])
@@ -85,12 +102,15 @@ if "active_blueprint" in st.session_state and "active_story_id" in st.session_st
             update_story(story_id, {"blueprint": bp.model_dump(mode="json")})
         if st.button("↻ Regenerate 5 hooks", key=f"rehooks_{story_id}"):
             with st.spinner("Generating stronger hooks…"):
-                bp.hooks = regenerate_hooks(api_key, model, bp)
-                bp.recommended_hook_index = max(range(5), key=lambda i: bp.hooks[i].score)
-                bp.selected_hook_index = bp.recommended_hook_index
-                st.session_state["active_blueprint"] = bp.model_dump(mode="json")
-                update_story(story_id, {"blueprint": bp.model_dump(mode="json")})
-                st.rerun()
+                try:
+                    bp.hooks = regenerate_hooks(api_key, model, bp)
+                    bp.recommended_hook_index = max(range(5), key=lambda i: bp.hooks[i].score)
+                    bp.selected_hook_index = bp.recommended_hook_index
+                    st.session_state["active_blueprint"] = bp.model_dump(mode="json")
+                    update_story(story_id, {"blueprint": bp.model_dump(mode="json")})
+                    st.rerun()
+                except Exception as exc:
+                    show_generation_error(exc)
 
     with tabs[2]:
         st.caption(f"Master timing: {bp.total_duration_seconds:.1f}s across exactly 10 scenes")
@@ -98,11 +118,14 @@ if "active_blueprint" in st.session_state and "active_story_id" in st.session_st
             render_scene(scene, expanded=scene.scene_number == 1)
             if st.button(f"↻ Regenerate Scene {scene.scene_number}", key=f"regen_{story_id}_{scene.scene_number}"):
                 with st.spinner(f"Regenerating Scene {scene.scene_number}…"):
-                    bp.scenes[scene.scene_number - 1] = regenerate_scene(api_key, model, bp, scene.scene_number)
-                    bp = StoryBlueprint.model_validate(bp.model_dump())
-                    st.session_state["active_blueprint"] = bp.model_dump(mode="json")
-                    update_story(story_id, {"blueprint": bp.model_dump(mode="json")})
-                    st.rerun()
+                    try:
+                        bp.scenes[scene.scene_number - 1] = regenerate_scene(api_key, model, bp, scene.scene_number)
+                        bp = StoryBlueprint.model_validate(bp.model_dump())
+                        st.session_state["active_blueprint"] = bp.model_dump(mode="json")
+                        update_story(story_id, {"blueprint": bp.model_dump(mode="json")})
+                        st.rerun()
+                    except Exception as exc:
+                        show_generation_error(exc)
 
     with tabs[3]:
         render_sources(bp)
