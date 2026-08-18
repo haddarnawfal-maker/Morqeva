@@ -14,7 +14,14 @@ def secret_exists(path):
         return False
 
 c1,c2,c3 = st.columns(3)
-c1.metric("Cloud Database", "Connected" if secret_exists(["connections","sql","url"]) else "Missing")
+try:
+    conn = st.connection("sql", type="sql")
+    conn.query("select 1", ttl=0)
+    db_status = "Connected"
+except Exception:
+    db_status = "Missing"
+
+c1.metric("Cloud Database", db_status)
 c2.metric("Gemini API", "Connected" if secret_exists(["GEMINI_API_KEY"]) else "Missing")
 c3.metric("Version", VERSION)
 
