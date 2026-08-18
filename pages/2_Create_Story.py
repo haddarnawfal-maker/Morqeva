@@ -4,7 +4,7 @@ import streamlit as st
 from ai.story_engine import generate_blueprint,regenerate_hooks,regenerate_scene
 from components.story_ui import render_hook_picker,render_research,render_scene,render_sources
 from config.settings import STORY_MODES,ORIGIN_OPTIONS
-from data.store import create_story,update_story,content_id,get_story,record_ai_usage,summarize_ai_usage
+from data.store import create_story,update_story,content_id,get_story,record_ai_usage,summarize_ai_usage,delete_story
 from models.story_blueprint import StoryBlueprint
 from utils.helpers import cloud_guard,page_header,production_defaults
 
@@ -74,5 +74,11 @@ if "active_blueprint" in st.session_state and "active_story_id" in st.session_st
  with tabs[3]: render_sources(bp)
  with tabs[4]: render_ai_usage((get_story(story_id) or {}).get("performance") or {})
  st.markdown('<div class="mq-section"><h3>Approval gate</h3><span>STEP 03 · RELEASE</span></div>',unsafe_allow_html=True)
- if st.button("✓ APPROVE BLUEPRINT → PRODUCTION",type="primary",use_container_width=True):
+ c1,c2=st.columns([3,1])
+ if c1.button("✓ APPROVE BLUEPRINT → PRODUCTION",type="primary",use_container_width=True):
   update_story(story_id,{"title":bp.final_title,"country":bp.country,"blueprint":bp.model_dump(mode="json"),"production":production_defaults(bp.model_dump(mode="json")),"status":"PRODUCTION"}); st.success(f"{content_id(story_id)} moved to Production.")
+ with c2.popover("Delete story",use_container_width=True):
+  st.warning(f"Delete {content_id(story_id)} permanently?")
+  confirm=st.checkbox("Yes, permanently delete it",key=f"confirm_delete_create_{story_id}")
+  if st.button("Delete permanently",type="secondary",disabled=not confirm,key=f"delete_create_{story_id}",use_container_width=True):
+   delete_story(story_id); st.session_state.pop("active_story_id",None); st.session_state.pop("active_blueprint",None); st.success("Story deleted."); st.rerun()
