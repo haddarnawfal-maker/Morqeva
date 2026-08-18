@@ -1,9 +1,9 @@
 import streamlit as st
 
 from ai.story_engine import generate_blueprint, regenerate_hooks, regenerate_scene
-from components.story_ui import render_hook_picker, render_research, render_scene, render_sources
+from components.story_ui import render_ai_usage, render_hook_picker, render_research, render_scene, render_sources
 from config.settings import STORY_MODES, ORIGIN_OPTIONS, TARGET_PLATFORMS
-from data.store import create_story, update_story, content_id
+from data.store import create_story, update_story, content_id, get_story, record_ai_usage, summarize_ai_usage
 from models.story_blueprint import StoryBlueprint
 from utils.helpers import cloud_guard, page_header, production_defaults
 
@@ -25,8 +25,8 @@ def show_generation_error(exc: Exception) -> None:
     lowered = message.lower()
     if "429" in lowered or "quota" in lowered or "too_many_requests" in lowered or "resource_exhausted" in lowered:
         st.warning(
-            "Gemini free quota is temporarily exhausted. MORQEVA is OK — no story was created and nothing was lost. "
-            "Wait for the quota window to reset, then press Generate once. Repeated clicks will not help."
+            "Gemini quota is temporarily exhausted. MORQEVA is OK — no story was created and nothing was lost. "
+            "Wait for the quota window to reset or enable Gemini API billing, then press Generate once. Repeated clicks will not help."
         )
         st.caption("Quota protection: generation stopped immediately instead of continuing with more AI work.")
     elif "503" in lowered or "unavailable" in lowered or "overloaded" in lowered:
@@ -50,6 +50,7 @@ if generate:
     else:
         with st.status("MORQEVA is researching and building the production blueprint…", expanded=True) as status:
             st.write("Researching the subject and verification boundaries…")
+            usage_events = []
             try:
                 bp = generate_blueprint(
                     api_key=api_key,
@@ -59,6 +60,7 @@ if generate:
                     origin_preference=origin,
                     country_hint=country_hint.strip(),
                     use_grounding=grounding_enabled,
+                    usage_sink=usage_events,
                 )
                 st.write("Generating 5 hooks and 10 production-ready scenes…")
                 row = create_story({
@@ -69,6 +71,7 @@ if generate:
                     "status": "BLUEPRINT_REVIEW",
                     "blueprint": bp.model_dump(mode="json"),
                     "production": production_defaults(bp.model_dump(mode="json")),
+                    "performance": {"ai_usage": summarize_ai_usage(usage_events)},
                 })
                 st.session_state["active_story_id"] = row["id"]
                 st.session_state["active_blueprint"] = bp.model_dump(mode="json")
@@ -83,7 +86,7 @@ if "active_blueprint" in st.session_state and "active_story_id" in st.session_st
 
     st.divider()
     st.markdown(f"## {content_id(story_id)} · {bp.final_title}")
-    tabs = st.tabs(["Story & facts", "Hooks", "10 scenes", "Sources"])
+    tabs = st.tabs(["Story & facts", "Hooks", "10 scenes", "Sources", "API usage"])
 
     with tabs[0]:
         render_research(bp)
@@ -102,12 +105,14 @@ if "active_blueprint" in st.session_state and "active_story_id" in st.session_st
             update_story(story_id, {"blueprint": bp.model_dump(mode="json")})
         if st.button("↻ Regenerate 5 hooks", key=f"rehooks_{story_id}"):
             with st.spinner("Generating stronger hooks…"):
+                usage_events = []
                 try:
-                    bp.hooks = regenerate_hooks(api_key, model, bp)
+                    bp.hooks = regenerate_hooks(api_key, model, bp, usage_sink=usage_events)
                     bp.recommended_hook_index = max(range(5), key=lambda i: bp.hooks[i].score)
                     bp.selected_hook_index = bp.recommended_hook_index
                     st.session_state["active_blueprint"] = bp.model_dump(mode="json")
                     update_story(story_id, {"blueprint": bp.model_dump(mode="json")})
+                    record_ai_usage(story_id, usage_events)
                     st.rerun()
                 except Exception as exc:
                     show_generation_error(exc)
@@ -118,17 +123,23 @@ if "active_blueprint" in st.session_state and "active_story_id" in st.session_st
             render_scene(scene, expanded=scene.scene_number == 1)
             if st.button(f"↻ Regenerate Scene {scene.scene_number}", key=f"regen_{story_id}_{scene.scene_number}"):
                 with st.spinner(f"Regenerating Scene {scene.scene_number}…"):
+                    usage_events = []
                     try:
-                        bp.scenes[scene.scene_number - 1] = regenerate_scene(api_key, model, bp, scene.scene_number)
+                        bp.scenes[scene.scene_number - 1] = regenerate_scene(api_key, model, bp, scene.scene_number, usage_sink=usage_events)
                         bp = StoryBlueprint.model_validate(bp.model_dump())
                         st.session_state["active_blueprint"] = bp.model_dump(mode="json")
                         update_story(story_id, {"blueprint": bp.model_dump(mode="json")})
+                        record_ai_usage(story_id, usage_events)
                         st.rerun()
                     except Exception as exc:
                         show_generation_error(exc)
 
     with tabs[3]:
         render_sources(bp)
+
+    with tabs[4]:
+        live_story = get_story(story_id) or {}
+        render_ai_usage(live_story.get("performance") or {})
 
     st.divider()
     if st.button("✓ Approve Blueprint → Production", type="primary", use_container_width=True):
