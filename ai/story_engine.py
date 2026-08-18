@@ -93,8 +93,7 @@ Return a concise research dossier containing:
 - an original angle that avoids generic "haunted place" framing
 Do not write the final 10 scenes yet.
 """
-if "selected_hook_index" not in self.model_fields_set:
-    self.selected_hook_index = self.recommended_hook_index
+model=model,
 
 def research_story(api_key: str, model: str, seed: str, story_mode: str, origin_preference: str, country_hint: str = "") -> Tuple[str, List[Source]]:
     client = _client(api_key)
