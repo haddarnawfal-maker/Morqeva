@@ -1,14 +1,26 @@
 import html
 import pandas as pd
 import streamlit as st
+from sqlalchemy import text
 from ai.story_engine import regenerate_hooks,regenerate_scene
 from components.story_ui import render_hook_picker,render_research,render_scene,render_sources
-from data.store import load_stories,content_id,update_story,record_ai_usage,delete_story,delete_all_stories
+from data.store import load_stories,content_id,update_story,record_ai_usage,get_connection
 from models.story_blueprint import StoryBlueprint
 from utils.helpers import cloud_guard,page_header,status_label,production_defaults
 
 cloud_guard(); page_header("Story Library","Browse every MORQEVA story, status and production blueprint from one vault.","MORQEVA · STORY VAULT")
 stories=load_stories()
+
+def delete_story_local(story_id:int):
+ conn=get_connection()
+ with conn.session as session:
+  session.execute(text("delete from public.stories where id=:id"),{"id":story_id}); session.commit()
+
+def delete_all_local():
+ conn=get_connection()
+ with conn.session as session:
+  session.execute(text("delete from public.stories")); session.commit()
+
 if not stories: st.info("No stories yet. Create the first one from Create Story."); st.stop()
 
 st.markdown('<div class="mq-section"><h3>Vault overview</h3><span>ALL STORIES</span></div>',unsafe_allow_html=True)
@@ -21,7 +33,7 @@ with st.popover("Vault actions"):
  st.caption("Permanent actions")
  confirm_all=st.checkbox("I want to permanently delete every story",key="confirm_delete_all")
  if st.button("Delete ALL stories",disabled=not confirm_all,use_container_width=True):
-  delete_all_stories(); st.session_state.pop("active_story_id",None); st.session_state.pop("active_blueprint",None); st.success("Vault cleared."); st.rerun()
+  delete_all_local(); st.session_state.pop("active_story_id",None); st.session_state.pop("active_blueprint",None); st.rerun()
 
 st.markdown('<div class="mq-section"><h3>Open story</h3><span>DETAILED WORKSPACE</span></div>',unsafe_allow_html=True)
 labels=[f"{content_id(s)} · {s.get('title','Untitled')} · {status_label(s.get('status',''))}" for s in stories]
@@ -66,4 +78,4 @@ with c2:
   st.warning(f"Delete {content_id(story)} permanently?")
   confirm=st.checkbox("Yes, permanently delete it",key=f"confirm_delete_library_{story['id']}")
   if st.button("Delete permanently",disabled=not confirm,key=f"delete_library_{story['id']}",use_container_width=True):
-   delete_story(story["id"]); st.session_state.pop("active_story_id",None); st.session_state.pop("active_blueprint",None); st.success("Story deleted."); st.rerun()
+   delete_story_local(story["id"]); st.session_state.pop("active_story_id",None); st.session_state.pop("active_blueprint",None); st.rerun()
