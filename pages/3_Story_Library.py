@@ -1,8 +1,9 @@
 import pandas as pd
 import streamlit as st
 
-from components.story_ui import render_research, render_scene, render_sources
-from data.store import load_stories, content_id
+from ai.story_engine import regenerate_hooks, regenerate_scene
+from components.story_ui import render_hook_picker, render_research, render_scene, render_sources
+from data.store import load_stories, content_id, update_story
 from models.story_blueprint import StoryBlueprint
 from utils.helpers import cloud_guard, page_header, status_label
 
@@ -25,11 +26,97 @@ if not bp_raw:
 
 bp = StoryBlueprint.model_validate(bp_raw)
 st.markdown(f"## {content_id(story)} · {bp.final_title}")
-t1, t2, t3 = st.tabs(["Research", "10 scenes", "Sources"])
+t1, t2, t3, t4 = st.tabs(["Research", "Hooks", "10 scenes", "Sources"])
+
 with t1:
     render_research(bp)
+
 with t2:
+    recommended = bp.recommended_hook_index
+
+    st.success(
+        f"⭐ Recommended hook #{recommended + 1}: "
+        f"{bp.hooks[recommended].text}"
+    )
+
+    chosen = render_hook_picker(
+        bp,
+        key_prefix=f"library_{story['id']}",
+    )
+
+    c1, c2 = st.columns(2)
+
+    if c1.button(
+        "✓ Use selected hook",
+        key=f"use_hook_{story['id']}",
+        type="primary",
+        use_container_width=True,
+    ):
+        try:
+            api_key = str(st.secrets["GEMINI_API_KEY"])
+            model = str(st.secrets.get("GEMINI_MODEL", "gemini-3.6-flash"))
+
+            bp.selected_hook_index = chosen
+
+            with st.spinner("Applying the hook and rewriting Scene 1…"):
+                bp.scenes[0] = regenerate_scene(
+                    api_key,
+                    model,
+                    bp,
+                    1,
+                )
+
+                bp = StoryBlueprint.model_validate(bp.model_dump())
+
+                update_story(
+                    story["id"],
+                    {"blueprint": bp.model_dump(mode="json")},
+                )
+
+            st.success(
+                f"Hook #{chosen + 1} selected and Scene 1 updated."
+            )
+            st.rerun()
+
+        except Exception as exc:
+            st.error(f"Could not apply hook: {exc}")
+
+    if c2.button(
+        "↻ Regenerate 5 hooks",
+        key=f"regen_hooks_{story['id']}",
+        use_container_width=True,
+    ):
+        try:
+            api_key = str(st.secrets["GEMINI_API_KEY"])
+            model = str(st.secrets.get("GEMINI_MODEL", "gemini-3.6-flash"))
+
+            with st.spinner("Generating 5 stronger hooks…"):
+                bp.hooks = regenerate_hooks(
+                    api_key,
+                    model,
+                    bp,
+                )
+
+                bp.recommended_hook_index = max(
+                    range(5),
+                    key=lambda i: bp.hooks[i].score,
+                )
+
+                bp.selected_hook_index = bp.recommended_hook_index
+
+                update_story(
+                    story["id"],
+                    {"blueprint": bp.model_dump(mode="json")},
+                )
+
+            st.rerun()
+
+        except Exception as exc:
+            st.error(f"Hook regeneration failed: {exc}")
+
+with t3:
     for s in bp.scenes:
         render_scene(s)
-with t3:
+
+with t4:
     render_sources(bp)
