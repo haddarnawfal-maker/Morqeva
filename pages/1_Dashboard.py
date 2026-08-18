@@ -28,8 +28,7 @@ if stories:
             "Country": bp.get("country", story.get("country", "")),
             "Mode": story.get("story_mode", "").replace("_", " ").title(),
             "Status": status_label(story.get("status", "")),
-            "Updated": (story.get("updated_at") or "")[:16].replace("T", " "),
-        })
+"Updated": story.get("updated_at").strftime("%Y-%m-%d %H:%M") if story.get("updated_at") else "",        })
     st.markdown("### Recent stories")
     st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
 else:
