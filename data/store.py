@@ -49,6 +49,7 @@ def summarize_ai_usage(events: List[Dict[str, Any]]) -> Dict[str, Any]:
         "billed_output_tokens": sum(int(e.get("billed_output_tokens", 0) or 0) for e in events),
         "tool_tokens": sum(int(e.get("tool_tokens", 0) or 0) for e in events),
         "total_tokens": sum(int(e.get("total_tokens", 0) or 0) for e in events),
+        "cached_tokens": sum(int(e.get("cached_tokens", 0) or 0) for e in events),
         "search_requests": sum(int(e.get("search_requests", 0) or 0) for e in events),
         "estimated_cost_usd": round(sum(float(e.get("estimated_cost_usd", 0) or 0) for e in events), 6),
     }
