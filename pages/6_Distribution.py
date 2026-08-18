@@ -5,7 +5,7 @@ from data.store import load_stories, update_story, content_id
 from utils.helpers import cloud_guard, page_header
 
 cloud_guard()
-page_header("Master Distribution", "Track one master across TikTok, Instagram Reels and YouTube Shorts.")
+page_header("Master Distribution", "Track one master across TikTok, Instagram Reels, YouTube Shorts and Facebook Reels.")
 stories = [s for s in load_stories() if s.get("status") in {"MASTER","DISTRIBUTION","ANALYTICS"}]
 if not stories:
     st.info("No master is ready for distribution.")
@@ -20,10 +20,18 @@ with st.form("dist"):
     tiktok = st.text_input("TikTok URL", value=dist.get("tiktok_url", ""))
     instagram = st.text_input("Instagram Reel URL", value=dist.get("instagram_url", ""))
     youtube = st.text_input("YouTube Short URL", value=dist.get("youtube_url", ""))
+    facebook = st.text_input("Facebook Reel URL", value=dist.get("facebook_url", ""))
     save = st.form_submit_button("Save Distribution", type="primary")
     if save:
-        payload = {"master_url":master_url,"publish_date":str(publish_date),"tiktok_url":tiktok,"instagram_url":instagram,"youtube_url":youtube}
-        status = "ANALYTICS" if any([tiktok, instagram, youtube]) else "DISTRIBUTION"
-        update_story(story["id"], {"distribution":payload,"status":status})
+        payload = {
+            "master_url": master_url,
+            "publish_date": str(publish_date),
+            "tiktok_url": tiktok,
+            "instagram_url": instagram,
+            "youtube_url": youtube,
+            "facebook_url": facebook,
+        }
+        status = "ANALYTICS" if any([tiktok, instagram, youtube, facebook]) else "DISTRIBUTION"
+        update_story(story["id"], {"distribution": payload, "status": status})
         st.success("Distribution saved.")
         st.rerun()
