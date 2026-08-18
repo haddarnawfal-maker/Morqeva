@@ -5,7 +5,7 @@ from ai.story_engine import regenerate_hooks, regenerate_scene
 from components.story_ui import render_hook_picker, render_research, render_scene, render_sources
 from data.store import load_stories, content_id, update_story
 from models.story_blueprint import StoryBlueprint
-from utils.helpers import cloud_guard, page_header, status_label
+from utils.helpers import cloud_guard, page_header, status_label, production_defaults
 
 cloud_guard()
 page_header("Story Library", "Every MORQEVA story and its complete intelligence blueprint in one cloud workspace.")
@@ -120,3 +120,23 @@ with t3:
 
 with t4:
     render_sources(bp)
+
+st.divider()
+current_status = story.get("status", "")
+if current_status == "BLUEPRINT_REVIEW":
+    st.caption("Blueprint review complete? Send this story into the production tracker when the hook, scenes and prompts are ready.")
+    if st.button("✓ Approve Blueprint → Production", type="primary", use_container_width=True, key=f"approve_{story['id']}"):
+        update_story(
+            story["id"],
+            {
+                "title": bp.final_title,
+                "country": bp.country,
+                "blueprint": bp.model_dump(mode="json"),
+                "production": production_defaults(bp.model_dump(mode="json")),
+                "status": "PRODUCTION",
+            },
+        )
+        st.success(f"{content_id(story)} is now ready in Production.")
+        st.rerun()
+elif current_status in {"PRODUCTION", "QC", "MASTER"}:
+    st.success(f"Current stage: {status_label(current_status)}")
