@@ -2,8 +2,8 @@ import pandas as pd
 import streamlit as st
 
 from ai.story_engine import regenerate_hooks, regenerate_scene
-from components.story_ui import render_hook_picker, render_research, render_scene, render_sources
-from data.store import load_stories, content_id, update_story
+from components.story_ui import render_ai_usage, render_hook_picker, render_research, render_scene, render_sources
+from data.store import load_stories, content_id, update_story, record_ai_usage
 from models.story_blueprint import StoryBlueprint
 from utils.helpers import cloud_guard, page_header, status_label, production_defaults
 
@@ -26,7 +26,7 @@ if not bp_raw:
 
 bp = StoryBlueprint.model_validate(bp_raw)
 st.markdown(f"## {content_id(story)} · {bp.final_title}")
-t1, t2, t3, t4 = st.tabs(["Research", "Hooks", "10 scenes", "Sources"])
+t1, t2, t3, t4, t5 = st.tabs(["Research", "Hooks", "10 scenes", "Sources", "API usage"])
 
 with t1:
     render_research(bp)
@@ -57,6 +57,7 @@ with t2:
             model = str(st.secrets.get("GEMINI_MODEL", "gemini-3.6-flash"))
 
             bp.selected_hook_index = chosen
+            usage_events = []
 
             with st.spinner("Applying the hook and rewriting Scene 1…"):
                 bp.scenes[0] = regenerate_scene(
@@ -64,6 +65,7 @@ with t2:
                     model,
                     bp,
                     1,
+                    usage_sink=usage_events,
                 )
 
                 bp = StoryBlueprint.model_validate(bp.model_dump())
@@ -72,6 +74,7 @@ with t2:
                     story["id"],
                     {"blueprint": bp.model_dump(mode="json")},
                 )
+                record_ai_usage(story["id"], usage_events)
 
             st.success(
                 f"Hook #{chosen + 1} selected and Scene 1 updated."
@@ -89,12 +92,14 @@ with t2:
         try:
             api_key = str(st.secrets["GEMINI_API_KEY"])
             model = str(st.secrets.get("GEMINI_MODEL", "gemini-3.6-flash"))
+            usage_events = []
 
             with st.spinner("Generating 5 stronger hooks…"):
                 bp.hooks = regenerate_hooks(
                     api_key,
                     model,
                     bp,
+                    usage_sink=usage_events,
                 )
 
                 bp.recommended_hook_index = max(
@@ -108,6 +113,7 @@ with t2:
                     story["id"],
                     {"blueprint": bp.model_dump(mode="json")},
                 )
+                record_ai_usage(story["id"], usage_events)
 
             st.rerun()
 
@@ -120,6 +126,9 @@ with t3:
 
 with t4:
     render_sources(bp)
+
+with t5:
+    render_ai_usage(story.get("performance") or {})
 
 st.divider()
 current_status = story.get("status", "")
