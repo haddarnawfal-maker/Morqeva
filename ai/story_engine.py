@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-import json
 from urllib.parse import urlparse
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Optional, Any
 
 from google import genai
 from pydantic import TypeAdapter
@@ -41,8 +40,52 @@ LOCKED MASTER RULES:
 """
 
 
+MODEL_PRICING_USD_PER_MILLION = {
+    "gemini-3.6-flash": {"input": 1.50, "output": 7.50},
+}
+
+
 def _client(api_key: str):
     return genai.Client(api_key=api_key)
+
+
+def _capture_usage(
+    interaction: Any,
+    model: str,
+    operation: str,
+    usage_sink: Optional[List[Dict[str, Any]]] = None,
+    search_requests: int = 0,
+) -> Dict[str, Any]:
+    usage = getattr(interaction, "usage", None)
+    input_tokens = int(getattr(usage, "total_input_tokens", 0) or 0) if usage else 0
+    output_tokens = int(getattr(usage, "total_output_tokens", 0) or 0) if usage else 0
+    thought_tokens = int(getattr(usage, "total_thought_tokens", 0) or 0) if usage else 0
+    tool_tokens = int(getattr(usage, "total_tool_use_tokens", 0) or 0) if usage else 0
+    total_tokens = int(getattr(usage, "total_tokens", 0) or 0) if usage else 0
+
+    # Gemini Interactions exposes thinking separately on supported responses; paid output pricing includes thinking.
+    billed_output_tokens = output_tokens + thought_tokens
+    pricing = MODEL_PRICING_USD_PER_MILLION.get(model, {"input": 0.0, "output": 0.0})
+    estimated_cost_usd = (
+        input_tokens * float(pricing["input"]) / 1_000_000
+        + billed_output_tokens * float(pricing["output"]) / 1_000_000
+    )
+
+    event = {
+        "model": model,
+        "operation": operation,
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
+        "thought_tokens": thought_tokens,
+        "billed_output_tokens": billed_output_tokens,
+        "tool_tokens": tool_tokens,
+        "total_tokens": total_tokens,
+        "search_requests": int(search_requests or 0),
+        "estimated_cost_usd": round(estimated_cost_usd, 6),
+    }
+    if usage_sink is not None:
+        usage_sink.append(event)
+    return event
 
 
 def _extract_citations(interaction) -> List[Source]:
@@ -95,13 +138,22 @@ Do not write the final 10 scenes yet.
 """
 
 
-def research_story(api_key: str, model: str, seed: str, story_mode: str, origin_preference: str, country_hint: str = "") -> Tuple[str, List[Source]]:
+def research_story(
+    api_key: str,
+    model: str,
+    seed: str,
+    story_mode: str,
+    origin_preference: str,
+    country_hint: str = "",
+    usage_sink: Optional[List[Dict[str, Any]]] = None,
+) -> Tuple[str, List[Source]]:
     client = _client(api_key)
     interaction = client.interactions.create(
         model=model,
         input=_research_prompt(seed, story_mode, origin_preference, country_hint),
         tools=[{"type": "google_search"}],
     )
+    _capture_usage(interaction, model, "grounded_research", usage_sink, search_requests=1)
     return interaction.output_text, _extract_citations(interaction)
 
 
@@ -119,6 +171,7 @@ def generate_blueprint(
     origin_preference: str,
     country_hint: str = "",
     use_grounding: bool = True,
+    usage_sink: Optional[List[Dict[str, Any]]] = None,
 ) -> StoryBlueprint:
     research_text = ""
     sources: List[Source] = []
@@ -133,6 +186,7 @@ def generate_blueprint(
             story_mode=story_mode,
             origin_preference=origin_preference,
             country_hint=country_hint,
+            usage_sink=usage_sink,
         )
     else:
         research_text = (
@@ -231,6 +285,7 @@ Return ONLY schema-valid structured output.
             "schema": StoryBlueprint.model_json_schema(),
         },
     )
+    _capture_usage(interaction, model, "full_blueprint", usage_sink)
     blueprint = StoryBlueprint.model_validate_json(interaction.output_text)
     blueprint.sources = sources
     blueprint.seed = seed
@@ -238,7 +293,12 @@ Return ONLY schema-valid structured output.
     return blueprint
 
 
-def regenerate_hooks(api_key: str, model: str, blueprint: StoryBlueprint) -> List[HookOption]:
+def regenerate_hooks(
+    api_key: str,
+    model: str,
+    blueprint: StoryBlueprint,
+    usage_sink: Optional[List[Dict[str, Any]]] = None,
+) -> List[HookOption]:
     adapter = TypeAdapter(List[HookOption])
     prompt = f"""
 {MASTER_CONTEXT}
@@ -265,10 +325,17 @@ Return only 5 hook objects. Keep factual wording compatible with the story mode.
         input=prompt,
         response_format={"type": "text", "mime_type": "application/json", "schema": adapter.json_schema()},
     )
+    _capture_usage(interaction, model, "regenerate_hooks", usage_sink)
     return adapter.validate_json(interaction.output_text)
 
 
-def regenerate_scene(api_key: str, model: str, blueprint: StoryBlueprint, scene_number: int) -> SceneBlueprint:
+def regenerate_scene(
+    api_key: str,
+    model: str,
+    blueprint: StoryBlueprint,
+    scene_number: int,
+    usage_sink: Optional[List[Dict[str, Any]]] = None,
+) -> SceneBlueprint:
     existing = blueprint.scenes[scene_number - 1]
     prompt = f"""
 {MASTER_CONTEXT}
@@ -293,7 +360,7 @@ DARIJA REGENERATION RULES:
 - Write natural everyday Moroccan Darija in Latin/French letters.
 - Adapt meaning; never translate English word-for-word.
 - Avoid formal Arabic/Moroccanized MSA words such as "moussafirin".
-- Prefer natural forms such as: kaygolo, li kaydkhol, had l-wad, b3d nss lil, kayلاحظ, wa7ed l7aja, ghriba, 7ed ma kayna3s.
+- Prefer natural forms such as: kaygolo, li kaydkhol, had l-wad, b3d nss lil, kayla7ed, wa7ed l7aja, ghriba, 7ed ma kayna3s.
 - Keep it short and conversational, as if a Moroccan person were telling the story to a friend.
 - Use common numerals such as 3, 7 and 9 where natural.
 
@@ -311,6 +378,7 @@ Return only one scene object.
         input=prompt,
         response_format={"type": "text", "mime_type": "application/json", "schema": SceneBlueprint.model_json_schema()},
     )
+    _capture_usage(interaction, model, f"regenerate_scene_{scene_number}", usage_sink)
     scene = SceneBlueprint.model_validate_json(interaction.output_text)
     scene.scene_number = scene_number
     return scene
