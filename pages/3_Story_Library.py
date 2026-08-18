@@ -3,7 +3,7 @@ import pandas as pd
 import streamlit as st
 from ai.story_engine import regenerate_hooks,regenerate_scene
 from components.story_ui import render_hook_picker,render_research,render_scene,render_sources
-from data.store import load_stories,content_id,update_story,record_ai_usage
+from data.store import load_stories,content_id,update_story,record_ai_usage,delete_story,delete_all_stories
 from models.story_blueprint import StoryBlueprint
 from utils.helpers import cloud_guard,page_header,status_label,production_defaults
 
@@ -16,6 +16,12 @@ cols=st.columns(3)
 for n,story in enumerate(stories[:6]):
  bp=story.get("blueprint") or {}; prod=story.get("production") or {}; scenes=prod.get("scenes") or {}; approved=sum(bool(v.get("approved")) for v in scenes.values()) if scenes else 0; progress=approved*10 if scenes else (15 if story.get("status")=="BLUEPRINT_REVIEW" else 0)
  with cols[n%3]: st.markdown(f'''<div class="mq-story"><span class="mq-pill">{html.escape(content_id(story))}</span><span class="mq-pill">{html.escape(status_label(story.get('status','')))}</span><h4>{html.escape(story.get('title','Untitled'))}</h4><div class="mq-muted">{html.escape(bp.get('country',story.get('country','')) or 'Dark Vault')} · {progress}%</div><div class="mq-progress"><i style="width:{progress}%"></i></div></div>''',unsafe_allow_html=True)
+
+with st.popover("Vault actions"):
+ st.caption("Permanent actions")
+ confirm_all=st.checkbox("I want to permanently delete every story",key="confirm_delete_all")
+ if st.button("Delete ALL stories",disabled=not confirm_all,use_container_width=True):
+  delete_all_stories(); st.session_state.pop("active_story_id",None); st.session_state.pop("active_blueprint",None); st.success("Vault cleared."); st.rerun()
 
 st.markdown('<div class="mq-section"><h3>Open story</h3><span>DETAILED WORKSPACE</span></div>',unsafe_allow_html=True)
 labels=[f"{content_id(s)} · {s.get('title','Untitled')} · {status_label(s.get('status',''))}" for s in stories]
@@ -49,7 +55,15 @@ with t5: render_ai_usage(story.get("performance") or {})
 
 current_status=story.get("status","")
 st.markdown('<div class="mq-section"><h3>Workflow action</h3><span>CURRENT STAGE</span></div>',unsafe_allow_html=True)
-if current_status=="BLUEPRINT_REVIEW":
- if st.button("✓ APPROVE BLUEPRINT → PRODUCTION",type="primary",use_container_width=True,key=f"approve_{story['id']}"):
-  update_story(story["id"],{"title":bp.final_title,"country":bp.country,"blueprint":bp.model_dump(mode="json"),"production":production_defaults(bp.model_dump(mode="json")),"status":"PRODUCTION"}); st.rerun()
-else: st.success(f"Current stage: {status_label(current_status)}")
+c1,c2=st.columns([3,1])
+with c1:
+ if current_status=="BLUEPRINT_REVIEW":
+  if st.button("✓ APPROVE BLUEPRINT → PRODUCTION",type="primary",use_container_width=True,key=f"approve_{story['id']}"):
+   update_story(story["id"],{"title":bp.final_title,"country":bp.country,"blueprint":bp.model_dump(mode="json"),"production":production_defaults(bp.model_dump(mode="json")),"status":"PRODUCTION"}); st.rerun()
+ else: st.success(f"Current stage: {status_label(current_status)}")
+with c2:
+ with st.popover("Delete story",use_container_width=True):
+  st.warning(f"Delete {content_id(story)} permanently?")
+  confirm=st.checkbox("Yes, permanently delete it",key=f"confirm_delete_library_{story['id']}")
+  if st.button("Delete permanently",disabled=not confirm,key=f"delete_library_{story['id']}",use_container_width=True):
+   delete_story(story["id"]); st.session_state.pop("active_story_id",None); st.session_state.pop("active_blueprint",None); st.success("Story deleted."); st.rerun()
