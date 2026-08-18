@@ -49,6 +49,19 @@ def _client(api_key: str):
     return genai.Client(api_key=api_key)
 
 
+def _usage_int(usage: Any, *names: str) -> int:
+    if not usage:
+        return 0
+    for name in names:
+        value = getattr(usage, name, None)
+        if value is not None:
+            try:
+                return int(value or 0)
+            except (TypeError, ValueError):
+                pass
+    return 0
+
+
 def _capture_usage(
     interaction: Any,
     model: str,
@@ -57,13 +70,18 @@ def _capture_usage(
     search_requests: int = 0,
 ) -> Dict[str, Any]:
     usage = getattr(interaction, "usage", None)
-    input_tokens = int(getattr(usage, "total_input_tokens", 0) or 0) if usage else 0
-    output_tokens = int(getattr(usage, "total_output_tokens", 0) or 0) if usage else 0
-    thought_tokens = int(getattr(usage, "total_thought_tokens", 0) or 0) if usage else 0
-    tool_tokens = int(getattr(usage, "total_tool_use_tokens", 0) or 0) if usage else 0
-    total_tokens = int(getattr(usage, "total_tokens", 0) or 0) if usage else 0
+    input_tokens = _usage_int(usage, "total_input_tokens", "prompt_token_count")
+    output_tokens = _usage_int(usage, "total_output_tokens", "candidates_token_count", "response_token_count")
+    thought_tokens = _usage_int(usage, "total_thought_tokens", "thoughts_token_count")
+    tool_tokens = _usage_int(usage, "total_tool_use_tokens", "tool_use_prompt_token_count")
+    total_tokens = _usage_int(usage, "total_tokens", "total_token_count")
+    cached_tokens = _usage_int(
+        usage,
+        "total_cached_tokens",
+        "cached_content_token_count",
+        "cachedContentTokenCount",
+    )
 
-    # Gemini Interactions exposes thinking separately on supported responses; paid output pricing includes thinking.
     billed_output_tokens = output_tokens + thought_tokens
     pricing = MODEL_PRICING_USD_PER_MILLION.get(model, {"input": 0.0, "output": 0.0})
     estimated_cost_usd = (
@@ -80,6 +98,7 @@ def _capture_usage(
         "billed_output_tokens": billed_output_tokens,
         "tool_tokens": tool_tokens,
         "total_tokens": total_tokens,
+        "cached_tokens": cached_tokens,
         "search_requests": int(search_requests or 0),
         "estimated_cost_usd": round(estimated_cost_usd, 6),
     }
@@ -138,21 +157,9 @@ Do not write the final 10 scenes yet.
 """
 
 
-def research_story(
-    api_key: str,
-    model: str,
-    seed: str,
-    story_mode: str,
-    origin_preference: str,
-    country_hint: str = "",
-    usage_sink: Optional[List[Dict[str, Any]]] = None,
-) -> Tuple[str, List[Source]]:
+def research_story(api_key: str, model: str, seed: str, story_mode: str, origin_preference: str, country_hint: str = "", usage_sink: Optional[List[Dict[str, Any]]] = None) -> Tuple[str, List[Source]]:
     client = _client(api_key)
-    interaction = client.interactions.create(
-        model=model,
-        input=_research_prompt(seed, story_mode, origin_preference, country_hint),
-        tools=[{"type": "google_search"}],
-    )
+    interaction = client.interactions.create(model=model, input=_research_prompt(seed, story_mode, origin_preference, country_hint), tools=[{"type": "google_search"}])
     _capture_usage(interaction, model, "grounded_research", usage_sink, search_requests=1)
     return interaction.output_text, _extract_citations(interaction)
 
@@ -163,36 +170,15 @@ def _source_index_text(sources: List[Source]) -> str:
     return "\n".join(f"[{s.index}] {s.title} — {s.url}" for s in sources)
 
 
-def generate_blueprint(
-    api_key: str,
-    model: str,
-    seed: str,
-    story_mode: str,
-    origin_preference: str,
-    country_hint: str = "",
-    use_grounding: bool = True,
-    usage_sink: Optional[List[Dict[str, Any]]] = None,
-) -> StoryBlueprint:
+def generate_blueprint(api_key: str, model: str, seed: str, story_mode: str, origin_preference: str, country_hint: str = "", use_grounding: bool = True, usage_sink: Optional[List[Dict[str, Any]]] = None) -> StoryBlueprint:
     research_text = ""
     sources: List[Source] = []
-
     if story_mode in {"VERIFIED_REAL", "FOLKLORE"}:
         if not use_grounding:
             raise RuntimeError("Verified/Folklore generation requires Google Search grounding to avoid unverified factual output.")
-        research_text, sources = research_story(
-            api_key=api_key,
-            model=model,
-            seed=seed,
-            story_mode=story_mode,
-            origin_preference=origin_preference,
-            country_hint=country_hint,
-            usage_sink=usage_sink,
-        )
+        research_text, sources = research_story(api_key, model, seed, story_mode, origin_preference, country_hint, usage_sink)
     else:
-        research_text = (
-            "This is an intentionally fictional legend. Do not invent citations or claim that invented details are documented. "
-            "Use ambiguity and folklore-style wording throughout."
-        )
+        research_text = "This is an intentionally fictional legend. Do not invent citations or claim that invented details are documented. Use ambiguity and folklore-style wording throughout."
 
     prompt = f"""
 {MASTER_CONTEXT}
@@ -274,17 +260,8 @@ VISUALS:
 
 Return ONLY schema-valid structured output.
 """
-
     client = _client(api_key)
-    interaction = client.interactions.create(
-        model=model,
-        input=prompt,
-        response_format={
-            "type": "text",
-            "mime_type": "application/json",
-            "schema": StoryBlueprint.model_json_schema(),
-        },
-    )
+    interaction = client.interactions.create(model=model, input=prompt, response_format={"type": "text", "mime_type": "application/json", "schema": StoryBlueprint.model_json_schema()})
     _capture_usage(interaction, model, "full_blueprint", usage_sink)
     blueprint = StoryBlueprint.model_validate_json(interaction.output_text)
     blueprint.sources = sources
@@ -293,12 +270,7 @@ Return ONLY schema-valid structured output.
     return blueprint
 
 
-def regenerate_hooks(
-    api_key: str,
-    model: str,
-    blueprint: StoryBlueprint,
-    usage_sink: Optional[List[Dict[str, Any]]] = None,
-) -> List[HookOption]:
+def regenerate_hooks(api_key: str, model: str, blueprint: StoryBlueprint, usage_sink: Optional[List[Dict[str, Any]]] = None) -> List[HookOption]:
     adapter = TypeAdapter(List[HookOption])
     prompt = f"""
 {MASTER_CONTEXT}
@@ -320,22 +292,12 @@ HOOK REGENERATION RULES:
 Return only 5 hook objects. Keep factual wording compatible with the story mode.
 """
     client = _client(api_key)
-    interaction = client.interactions.create(
-        model=model,
-        input=prompt,
-        response_format={"type": "text", "mime_type": "application/json", "schema": adapter.json_schema()},
-    )
+    interaction = client.interactions.create(model=model, input=prompt, response_format={"type": "text", "mime_type": "application/json", "schema": adapter.json_schema()})
     _capture_usage(interaction, model, "regenerate_hooks", usage_sink)
     return adapter.validate_json(interaction.output_text)
 
 
-def regenerate_scene(
-    api_key: str,
-    model: str,
-    blueprint: StoryBlueprint,
-    scene_number: int,
-    usage_sink: Optional[List[Dict[str, Any]]] = None,
-) -> SceneBlueprint:
+def regenerate_scene(api_key: str, model: str, blueprint: StoryBlueprint, scene_number: int, usage_sink: Optional[List[Dict[str, Any]]] = None) -> SceneBlueprint:
     existing = blueprint.scenes[scene_number - 1]
     prompt = f"""
 {MASTER_CONTEXT}
@@ -373,11 +335,7 @@ VISUAL/MOTION RULES:
 Return only one scene object.
 """
     client = _client(api_key)
-    interaction = client.interactions.create(
-        model=model,
-        input=prompt,
-        response_format={"type": "text", "mime_type": "application/json", "schema": SceneBlueprint.model_json_schema()},
-    )
+    interaction = client.interactions.create(model=model, input=prompt, response_format={"type": "text", "mime_type": "application/json", "schema": SceneBlueprint.model_json_schema()})
     _capture_usage(interaction, model, f"regenerate_scene_{scene_number}", usage_sink)
     scene = SceneBlueprint.model_validate_json(interaction.output_text)
     scene.scene_number = scene_number
