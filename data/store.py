@@ -38,6 +38,22 @@ def content_id(row_or_id: Any) -> str:
     return f"MOR-{int(raw_id):04d}"
 
 
+def summarize_ai_usage(events: List[Dict[str, Any]]) -> Dict[str, Any]:
+    events = list(events or [])
+    return {
+        "events": events,
+        "calls": len(events),
+        "input_tokens": sum(int(e.get("input_tokens", 0) or 0) for e in events),
+        "output_tokens": sum(int(e.get("output_tokens", 0) or 0) for e in events),
+        "thought_tokens": sum(int(e.get("thought_tokens", 0) or 0) for e in events),
+        "billed_output_tokens": sum(int(e.get("billed_output_tokens", 0) or 0) for e in events),
+        "tool_tokens": sum(int(e.get("tool_tokens", 0) or 0) for e in events),
+        "total_tokens": sum(int(e.get("total_tokens", 0) or 0) for e in events),
+        "search_requests": sum(int(e.get("search_requests", 0) or 0) for e in events),
+        "estimated_cost_usd": round(sum(float(e.get("estimated_cost_usd", 0) or 0) for e in events), 6),
+    }
+
+
 def load_stories() -> List[Dict[str, Any]]:
     conn = get_connection()
     try:
@@ -103,6 +119,17 @@ def update_story(story_id: int, fields: Dict[str, Any]) -> Dict[str, Any]:
         row = session.execute(sql, params).mappings().first()
         session.commit()
     return _decode_json_fields(dict(row)) if row else get_story(story_id)
+
+
+def record_ai_usage(story_id: int, new_events: List[Dict[str, Any]]) -> Dict[str, Any]:
+    if not new_events:
+        return get_story(story_id) or {}
+    story = get_story(story_id) or {}
+    performance = dict(story.get("performance") or {})
+    existing = performance.get("ai_usage") or {}
+    events = list(existing.get("events") or []) + list(new_events)
+    performance["ai_usage"] = summarize_ai_usage(events)
+    return update_story(story_id, {"performance": performance})
 
 
 def delete_story(story_id: int) -> None:
