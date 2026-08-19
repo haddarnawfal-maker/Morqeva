@@ -1,4 +1,7 @@
 import html
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
+
 import pandas as pd
 import streamlit as st
 from sqlalchemy import text
@@ -26,9 +29,43 @@ def render_ai_usage(performance):
  c1,c2,c3,c4=st.columns(4); c1.metric("Calls",int(usage.get("calls",0) or 0)); c2.metric("Input",f"{int(usage.get('input_tokens',0) or 0):,}"); c3.metric("Output",f"{int(usage.get('billed_output_tokens',0) or 0):,}"); c4.metric("Cached",f"{int(usage.get('cached_tokens',0) or 0):,}")
  st.caption(f"Thinking {int(usage.get('thought_tokens',0) or 0):,} · Grounded search {int(usage.get('search_requests',0) or 0)} · Est. cost ${float(usage.get('estimated_cost_usd',0) or 0):.4f}")
 
+def _quota_reset_context():
+ """Return the next Gemini RPD reset in Morocco time.
+
+ Google documents RPD resets at midnight Pacific time. This calculation uses real
+ timezone rules instead of hard-coding 08:00, so DST changes stay correct.
+ """
+ pacific=ZoneInfo("America/Los_Angeles")
+ morocco=ZoneInfo("Africa/Casablanca")
+ now_pt=datetime.now(pacific)
+ next_reset_pt=(now_pt+timedelta(days=1)).replace(hour=0,minute=0,second=0,microsecond=0)
+ next_reset_ma=next_reset_pt.astimezone(morocco)
+ return next_reset_ma
+
+def _quota_kind(message:str):
+ l=(message or "").lower().replace("_","").replace("-","").replace(" ","")
+ daily_markers=("requestsperday","perday","rpd","dailyquota","generatedrequestsperday")
+ minute_markers=("requestsperminute","perminute","rpm","tokensperminute","tpm")
+ if any(marker in l for marker in daily_markers): return "daily"
+ if any(marker in l for marker in minute_markers): return "minute"
+ return "unknown"
+
 def show_generation_error(exc):
  m=str(exc); l=m.lower()
- if "429" in l or "quota" in l or "resource_exhausted" in l: st.error("Gemini quota exhausted for the current window. MORQEVA stopped safely; no story was created.")
+ if "429" in l or "quota" in l or "resource_exhausted" in l:
+  kind=_quota_kind(m)
+  if kind=="daily":
+   reset=_quota_reset_context()
+   st.error(f"Gemini daily request quota is exhausted for this Google Cloud project. Daily quota resets at midnight Pacific time — next reset is about {reset.strftime('%H:%M')} Morocco time on {reset.strftime('%d %b')}.")
+   st.info("This quota is shared by the whole Google Cloud project, not just this API key. If you have not used MORQEVA since the last reset, the project/model quota may be stuck or another key/app in the same project may have consumed it.")
+  elif kind=="minute":
+   st.warning("Gemini's per-minute rate limit was reached. Wait about 60 seconds, then retry — this is not the daily quota.")
+  else:
+   reset=_quota_reset_context()
+   st.error("Gemini returned a quota/rate-limit error, but did not clearly identify whether it is the minute or daily limit.")
+   st.info(f"If it is the daily RPD limit, Google's next Pacific-midnight reset is about {reset.strftime('%H:%M')} Morocco time on {reset.strftime('%d %b')}.")
+  with st.expander("Gemini error details"):
+   st.code(m)
  elif "503" in l or "overloaded" in l: st.warning("Gemini is temporarily overloaded. Try again later.")
  else: st.error(f"Generation failed: {m}")
 
